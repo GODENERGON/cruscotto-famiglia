@@ -1,0 +1,14 @@
+{
+  "name": "cruscotto-famiglia",
+  "version": "0.1.0",
+  "description": "Cruscotto decisionale della famiglia: entrate, uscite, salvadanai e proiezione di cassa.",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "seed": "node --disable-warning=ExperimentalWarning scripts/seed.js",
+    "demo": "node --disable-warning=ExperimentalWarning scripts/seed.js --demo && DB=data/demo.db node --disable-warning=ExperimentalWarning server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  }
+}
