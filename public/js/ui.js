@@ -98,6 +98,10 @@ export function dialogo({ titolo, testo = '', campi = [], conferma = 'Salva', pe
       e.preventDefault();
       const out = {};
       for (const c of campi) {
+        if (c.tipo === 'giorni' || c.tipo === 'multi') {
+          out[c.nome] = [...d.querySelectorAll(`[name="${c.nome}"]:checked`)].map((x) => Number(x.value));
+          continue;
+        }
         const el = d.querySelector(`[name="${c.nome}"]`);
         let v = c.tipo === 'checkbox' ? el.checked : el.value.trim();
         if (c.tipo === 'euro') { v = v === '' ? null : parseEuro(v); if (v == null && el.value.trim()) return errore(`${c.etichetta}: importo non valido`); }
@@ -110,26 +114,48 @@ export function dialogo({ titolo, testo = '', campi = [], conferma = 'Salva', pe
       chiudi(out);
     });
     function errore(msg) { const p = d.querySelector('.errore-form'); p.textContent = msg; p.hidden = false; }
+    // campi che compaiono solo per certi valori di un altro campo: mostraSe: ['campo', ['valore', …]]
+    const aggiornaVisibili = () => {
+      for (const c of campi) {
+        if (!c.mostraSe) continue;
+        const [nome, valori] = c.mostraSe;
+        const src = d.querySelector(`[name="${nome}"]`);
+        const v = src?.type === 'checkbox' ? String(src.checked) : src?.value;
+        d.querySelector(`[data-campo="${c.nome}"]`).hidden = !valori.includes(v);
+      }
+    };
+    d.querySelector('form').addEventListener('change', aggiornaVisibili);
+    aggiornaVisibili();
     d.showModal();
     d.querySelector('input:not([type=checkbox]), select')?.focus();
   });
 }
 
+const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 function campoHtml(c) {
   const id = 'f-' + c.nome;
   const aiuto = c.aiuto ? `<span class="hint" id="${id}-h">${esc(c.aiuto)}</span>` : '';
   const desc = c.aiuto ? ` aria-describedby="${id}-h"` : '';
-  if (c.tipo === 'checkbox') return `<label class="check" for="${id}"><input type="checkbox" id="${id}" name="${c.nome}" ${c.valore ? 'checked' : ''}${desc}><span>${esc(c.etichetta)}</span></label>${aiuto}`;
+  const wrap = (html, cls = 'field') => `<div class="${cls}${c.largo ? ' wide' : ''}" data-campo="${c.nome}">${html}</div>`;
+  if (c.tipo === 'checkbox') return wrap(`<label class="check" for="${id}"><input type="checkbox" id="${id}" name="${c.nome}" ${c.valore ? 'checked' : ''}${desc}><span>${esc(c.etichetta)}</span></label>${aiuto}`, 'field wide');
+  if (c.tipo === 'giorni' || c.tipo === 'multi') {
+    const opz = c.tipo === 'giorni' ? GIORNI.map((g, i) => ({ value: i + 1, label: g })) : c.opzioni;
+    const sel = new Set((c.valore || []).map(Number));
+    const lista = opz.length ? opz.map((o) => `<label class="${c.tipo === 'giorni' ? 'chip-check' : 'check'}"><input type="checkbox" name="${c.nome}" value="${esc(o.value)}" ${sel.has(Number(o.value)) ? 'checked' : ''}><span>${esc(o.label)}</span></label>`).join('') : `<span class="hint">${esc(c.vuoto || 'Niente da scegliere')}</span>`;
+    return `<fieldset class="field wide${c.tipo === 'giorni' ? ' giorni' : ' multi'}" data-campo="${c.nome}"><legend>${esc(c.etichetta)}</legend><div class="opzioni">${lista}</div>${aiuto}</fieldset>`;
+  }
   let input;
   if (c.tipo === 'select') input = `<select class="input" id="${id}" name="${c.nome}"${desc}>${c.vuota !== false ? `<option value="">${esc(c.vuota || '—')}</option>` : ''}${c.opzioni.map((o) => `<option value="${esc(o.value)}" ${String(o.value) === String(c.valore ?? '') ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select>`;
   else if (c.tipo === 'textarea') input = `<textarea class="input" id="${id}" name="${c.nome}" rows="3"${desc}>${esc(c.valore ?? '')}</textarea>`;
   else {
-    const type = c.tipo === 'data' ? 'date' : 'text';
+    const type = c.tipo === 'data' ? 'date' : c.tipo === 'ora' ? 'time' : 'text';
     const mode = c.tipo === 'euro' || c.tipo === 'numero' ? ' inputmode="decimal"' : '';
     const val = c.tipo === 'euro' ? centsToInput(c.valore) : c.valore ?? '';
-    input = `<input class="input${c.tipo === 'euro' ? ' num' : ''}" type="${type}" id="${id}" name="${c.nome}" value="${esc(val)}"${mode}${desc} autocomplete="off">`;
+    const lista = c.suggerimenti?.length ? ` list="${id}-l"` : '';
+    input = `<input class="input${c.tipo === 'euro' ? ' num' : ''}" type="${type}" id="${id}" name="${c.nome}" value="${esc(val)}"${mode}${desc}${lista} autocomplete="off">`
+      + (lista ? `<datalist id="${id}-l">${c.suggerimenti.map((x) => `<option value="${esc(x)}">`).join('')}</datalist>` : '');
   }
-  return `<div class="field${c.largo ? ' wide' : ''}"><label for="${id}">${esc(c.etichetta)}</label>${input}${aiuto}</div>`;
+  return wrap(`<label for="${id}">${esc(c.etichetta)}</label>${input}${aiuto}`);
 }
 
 export async function conferma(titolo, testo, azione = 'Elimina') {
@@ -151,6 +177,8 @@ export const ICONE = {
   avanti: I('<path d="m9.5 6 6 6-6 6"/>'),
   cerca: I('<circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/>'),
   matita: I('<path d="M4 20h4L19 9l-4-4L4 16z"/>'),
+  tempo: I('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h3M8 17h6"/>'),
+  ripeti: I('<path d="M17 2.5 20 5.5l-3 3"/><path d="M4 11.5v-1a5 5 0 0 1 5-5h11"/><path d="m7 21.5-3-3 3-3"/><path d="M20 12.5v1a5 5 0 0 1-5 5H4"/>'),
 };
 
 // Marchio: tre corsie in verticale nei colori delle persone.

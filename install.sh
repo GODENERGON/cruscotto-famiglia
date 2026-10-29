@@ -4,7 +4,7 @@
 #   2. crea il database con i dati reali noti (se non c'è già)
 #   3. lo avvia come servizio systemd all'accensione (chiede la password di sudo)
 #   4. mette l'icona nel menu delle applicazioni e sulla Scrivania
-# Si può rilanciare: non tocca un database esistente.
+# Si può rilanciare dopo ogni git pull: aggiunge solo quello che manca, i dati inseriti restano.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,13 +23,9 @@ if ! "$NODE" -e 'const [a,b]=process.versions.node.split(".").map(Number); proce
 fi
 echo "✓ Node $VER"
 
-# 2. Database
-if [[ -f "$DIR/data/famiglia.db" ]]; then
-  echo "✓ Database già presente: lo lascio com'è"
-else
-  (cd "$DIR" && "$NODE" --disable-warning=ExperimentalWarning scripts/seed.js)
-  echo "✓ Database creato"
-fi
+# 2. Database: crea quello che manca (tabelle nuove, progetti, categorie) senza toccare i dati già inseriti
+(cd "$DIR" && "$NODE" --disable-warning=ExperimentalWarning scripts/seed.js >/dev/null)
+echo "✓ Database aggiornato ($DIR/data/famiglia.db)"
 
 # 3. Servizio
 SERVIZIO=/etc/systemd/system/cruscotto-famiglia.service

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { timingSafeEqual } from 'node:crypto';
 import { openDb } from './src/db.js';
 import { makeApi } from './src/api.js';
+import { creaGcal } from './src/gcal.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -16,7 +17,16 @@ const DB = process.env.DB || join(ROOT, 'data', 'famiglia.db');
 const PASSWORD = process.env.PASSWORD || '';   // facoltativa: accesso con utente qualsiasi e questa password
 
 const db = openDb(DB);
-const api = makeApi(db, { clock: process.env.OGGI || undefined });
+const gcal = creaGcal(db);
+
+// Sincronizzazione con Google Calendar: ogni 10 minuti, e 20 secondi dopo una modifica alle attività.
+let timerSync = null;
+const sincronizza = () => { if (gcal.stato().collegato) gcal.sincronizza().catch((e) => console.error('Google Calendar:', e.message)); };
+const dopoModifica = () => { clearTimeout(timerSync); timerSync = setTimeout(sincronizza, 20000); };
+setInterval(sincronizza, 10 * 60 * 1000).unref();
+setTimeout(sincronizza, 5000).unref();
+
+const api = makeApi(db, { clock: process.env.OGGI || undefined, gcal, dopoModifica });
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 
@@ -49,6 +59,17 @@ const send = (res, status, data, type = 'application/json; charset=utf-8') => {
 const server = createServer(async (req, res) => {
   if (!autorizzato(req)) { res.writeHead(401, { 'www-authenticate': 'Basic realm="Cruscotto Famiglia"' }); return res.end('Accesso richiesto'); }
   try {
+    // collegamento a Google: due passaggi con redirect, l'indirizzo di ritorno deve essere localhost
+    if (req.url.startsWith('/api/gcal/collega') || req.url.startsWith('/api/gcal/callback')) {
+      const host = req.headers.host || `localhost:${PORT}`;
+      const redirect = `http://${host}/api/gcal/callback`;
+      const u = new URL(req.url, 'http://x');
+      if (u.pathname === '/api/gcal/collega') { res.writeHead(302, { location: gcal.urlCollega(redirect) }); return res.end(); }
+      if (u.searchParams.get('error')) { res.writeHead(302, { location: '/#/impostazioni/google?esito=' + encodeURIComponent(u.searchParams.get('error')) }); return res.end(); }
+      try { await gcal.completaCollegamento(u.searchParams.get('code'), redirect); sincronizza(); }
+      catch (e) { res.writeHead(302, { location: '/#/impostazioni/google?esito=' + encodeURIComponent(e.message) }); return res.end(); }
+      res.writeHead(302, { location: '/#/impostazioni/google?esito=ok' }); return res.end();
+    }
     if (req.url.startsWith('/api/')) {
       const body = ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null;
       return send(res, 200, await api(req.method, req.url, body));

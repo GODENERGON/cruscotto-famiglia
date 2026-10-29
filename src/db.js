@@ -120,6 +120,59 @@ CREATE TABLE IF NOT EXISTS profili_csv (
   mappa TEXT NOT NULL                -- JSON con colonne e formati
 );
 
+-- ---------------------------------------------------------------- tempo (fase 2)
+CREATE TABLE IF NOT EXISTS progetti (
+  id INTEGER PRIMARY KEY,
+  nome TEXT NOT NULL UNIQUE,
+  area TEXT,                         -- Casa, DIY, Università, Maddalena, Salute...
+  persona_id INTEGER REFERENCES persone(id),
+  stato TEXT NOT NULL DEFAULT 'attivo' CHECK (stato IN ('idea','attivo','in_pausa','chiuso')),
+  inizio TEXT, fine TEXT,            -- previsti
+  budget INTEGER,                    -- centesimi
+  salvadanaio_id INTEGER REFERENCES salvadanai(id) ON DELETE SET NULL,
+  luogo TEXT,
+  note TEXT
+);
+
+CREATE TABLE IF NOT EXISTS attivita (
+  id INTEGER PRIMARY KEY,
+  titolo TEXT NOT NULL,
+  progetto_id INTEGER REFERENCES progetti(id) ON DELETE SET NULL,
+  persona_id INTEGER REFERENCES persone(id),
+  tipo TEXT NOT NULL DEFAULT 'compito' CHECK (tipo IN ('compito','evento')),
+  stato TEXT NOT NULL DEFAULT 'da_fare' CHECK (stato IN ('da_fare','in_corso','fatta')),
+  data TEXT,                         -- giorno (inizio, per un lavoro di più giorni)
+  ora TEXT,                          -- HH:MM, vuota = tutto il giorno
+  durata_min INTEGER,                -- per gli orari
+  fine TEXT,                         -- ultimo giorno di un lavoro lungo (Gantt)
+  scadenza TEXT,
+  luogo TEXT,
+  priorita INTEGER NOT NULL DEFAULT 0,
+  ripeti TEXT,                       -- JSON {"ogni":"settimana","giorni":[1,4],"fino":"2027-06-30"} o {"ogni":"mese"}
+  costo INTEGER,                     -- centesimi, stimato
+  note TEXT,
+  fatta_il TEXT,
+  gcal_id TEXT UNIQUE,               -- evento collegato su Google Calendar
+  gcal_aggiornato TEXT,              -- 'updated' di Google all'ultima sincronizzazione
+  aggiornato_il TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  eliminata INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS attivita_data ON attivita(data);
+
+CREATE TABLE IF NOT EXISTS dipendenze (
+  attivita_id INTEGER NOT NULL REFERENCES attivita(id) ON DELETE CASCADE,
+  dipende_da INTEGER NOT NULL REFERENCES attivita(id) ON DELETE CASCADE,
+  PRIMARY KEY (attivita_id, dipende_da)
+);
+
+-- intervalli occupati letti dagli altri calendari Google (lavoro, personale), per il tempo libero reale
+CREATE TABLE IF NOT EXISTS occupato (
+  id INTEGER PRIMARY KEY,
+  persona_id INTEGER REFERENCES persone(id),
+  inizio TEXT NOT NULL, fine TEXT NOT NULL,   -- ISO locali
+  fonte TEXT
+);
+
 CREATE TABLE IF NOT EXISTS impostazioni (
   chiave TEXT PRIMARY KEY,
   valore TEXT

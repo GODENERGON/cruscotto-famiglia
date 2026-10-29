@@ -99,6 +99,26 @@ tx(db, () => {
     db.prepare('INSERT OR IGNORE INTO salvadanai (nome, obiettivo, scadenza, versamento_mensile, quota_percento, quota_categoria_id, priorita, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .run(nome, ob, sc, vm, q, qc ? id('categorie', qc) : null, pr, note);
   }
+
+  // Progetti dalla lista di Denis. Stati e date da decidere: tutto parte come idea, tranne quelli già avviati.
+  const progetti = [
+    ['Camino, bagno e botola soffitta', 'Casa', 'attivo', 'Faedis', null],
+    ['Rinnovo soffitta', 'Casa', 'idea', 'Faedis', null],
+    ['Piscina esterna', 'Casa', 'idea', 'Faedis', null],
+    ['Casetta esterna', 'Casa', 'idea', 'Faedis', null],
+    ['Orto Faedis', 'DIY', 'attivo', 'Faedis', 'Orto Faedis'],
+    ['Workstation LLM', 'DIY', 'idea', 'Faedis', 'Workstation LLM'],
+    ['Sonic Ager in miniatura', 'DIY', 'idea', 'Faedis', null],
+    ['Università Denis', 'Università', 'idea', null, null],
+    ['Secondo appartamento', 'Investimenti', 'idea', null, 'Anticipo secondo appartamento'],
+    ['Impegni Maddalena', 'Maddalena', 'attivo', null, null],
+    ['Palestra e yoga', 'Salute', 'attivo', null, null],
+  ];
+  for (const [nome, area, stato, luogo, pot] of progetti) {
+    db.prepare('INSERT OR IGNORE INTO progetti (nome, area, stato, luogo, salvadanaio_id, persona_id) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(nome, area, stato, luogo, pot ? id('salvadanai', pot) : null, area === 'Maddalena' ? id('persone', 'Maddalena') : area === 'Università' ? id('persone', 'Denis') : null);
+  }
+  db.prepare("UPDATE progetti SET budget = ? WHERE nome = 'Orto Faedis' AND budget IS NULL").run(eur(2070));
 });
 
 if (demo) seedDemo();
@@ -143,6 +163,8 @@ function seedDemo() {
     pian.run(`${Number(mese.slice(0, 4)) + 1}-03-15`, eur(-2070), 'Impianto orto Faedis', id('salvadanai', 'Orto Faedis'));
   });
 
+  seedDemoTempo(mese);
+
   // movimenti mese per mese: le ricorrenze arrivate più le spese variabili
   const negozi = [
     ['ESSELUNGA UDINE', 'Spesa alimentare', 'Famiglia', 60, 140, 6],
@@ -178,4 +200,38 @@ function seedDemo() {
     }
     if (m !== mese) versaMensili(db, m, lastDay(m));
   }
+}
+
+// Attività di esempio per calendario, to-do e Gantt (INVENTATE).
+function seedDemoTempo(mese) {
+  if (db.prepare("SELECT 1 FROM attivita WHERE note = 'esempio'").get()) return;
+  const P = (n) => id('persone', n), G = (n) => id('progetti', n);
+  const lun = (() => { const d = new Date(oggi + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); })();
+  const g = (n) => { const d = new Date(lun + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const ins = (a) => {
+    const cols = Object.keys(a);
+    return Number(db.prepare(`INSERT INTO attivita (${cols.join(',')}, note) VALUES (${cols.map(() => '?').join(',')}, 'esempio')`).run(...cols.map((c) => a[c])).lastInsertRowid);
+  };
+  const dip = (a, b) => db.prepare('INSERT INTO dipendenze (attivita_id, dipende_da) VALUES (?, ?)').run(a, b);
+  tx(db, () => {
+    ins({ titolo: 'Palestra', tipo: 'evento', persona_id: P('Denis'), progetto_id: G('Palestra e yoga'), data: g(-14), ora: '18:30', durata_min: 75, ripeti: JSON.stringify({ ogni: 'settimana', giorni: [1, 4] }), luogo: 'Cividale' });
+    ins({ titolo: 'Yoga', tipo: 'evento', persona_id: P('Carmen'), progetto_id: G('Palestra e yoga'), data: g(-14), ora: '19:00', durata_min: 60, ripeti: JSON.stringify({ ogni: 'settimana', giorni: [2, 5] }), luogo: 'Faedis' });
+    ins({ titolo: 'Piscina', tipo: 'evento', persona_id: P('Maddalena'), progetto_id: G('Impegni Maddalena'), data: g(-14), ora: '17:00', durata_min: 60, ripeti: JSON.stringify({ ogni: 'settimana', giorni: [2, 5] }), luogo: 'Cividale' });
+    ins({ titolo: 'Visita pediatrica', tipo: 'evento', persona_id: P('Maddalena'), progetto_id: G('Impegni Maddalena'), data: g(3), ora: '16:30', durata_min: 45, luogo: 'Udine' });
+    ins({ titolo: 'Prenotare richiamo vaccino', tipo: 'compito', persona_id: P('Carmen'), progetto_id: G('Impegni Maddalena'), scadenza: g(9) });
+    ins({ titolo: 'Export CSV banca di ottobre', tipo: 'compito', persona_id: P('Denis'), data: g(1) });
+    ins({ titolo: 'F24 secondo acconto IRPEF', tipo: 'compito', persona_id: P('Denis'), scadenza: `${mese.slice(0, 4)}-11-30`, priorita: 2 });
+    ins({ titolo: 'Verifica conguaglio condominio', tipo: 'compito', persona_id: P('Denis'), luogo: 'Monfalcone' });
+    const m1 = ins({ titolo: 'Misure e progetto botola', tipo: 'compito', persona_id: P('Denis'), progetto_id: G('Camino, bagno e botola soffitta'), data: g(-7), fine: g(-3), stato: 'fatta', fatta_il: g(-3), luogo: 'Faedis' });
+    const m2 = ins({ titolo: 'Preventivo canna fumaria', tipo: 'compito', persona_id: P('Denis'), progetto_id: G('Camino, bagno e botola soffitta'), data: g(-2), fine: g(4), costo: eur(150), luogo: 'Faedis' });
+    const m3 = ins({ titolo: 'Taglio solaio e posa botola', tipo: 'compito', persona_id: P('Denis'), progetto_id: G('Camino, bagno e botola soffitta'), data: g(12), fine: g(16), costo: eur(380), luogo: 'Faedis' });
+    const m4 = ins({ titolo: 'Posa camino', tipo: 'compito', progetto_id: G('Camino, bagno e botola soffitta'), data: g(21), fine: g(33), costo: eur(2400), luogo: 'Faedis' });
+    const m5 = ins({ titolo: 'Bagno: impianti e piastrelle', tipo: 'compito', progetto_id: G('Camino, bagno e botola soffitta'), data: g(40), fine: g(68), costo: eur(4200), luogo: 'Faedis' });
+    dip(m2, m1); dip(m3, m1); dip(m4, m2); dip(m5, m3);
+    const o1 = ins({ titolo: 'Chiusura stagione e pacciamatura', tipo: 'compito', persona_id: P('Denis'), progetto_id: G('Orto Faedis'), data: g(5), fine: g(6), luogo: 'Faedis' });
+    const o2 = ins({ titolo: 'Prova radio LoRa con antenne di serie', tipo: 'compito', persona_id: P('Denis'), progetto_id: G('Orto Faedis'), data: g(18), fine: g(20), costo: eur(57), luogo: 'Faedis' });
+    const o3 = ins({ titolo: 'Recinzione e antigrandine', tipo: 'compito', persona_id: P('Denis'), progetto_id: G('Orto Faedis'), data: g(126), fine: g(140), costo: eur(1140), luogo: 'Faedis' });
+    const o4 = ins({ titolo: 'Quadro, sensori e irrigazione', tipo: 'compito', persona_id: P('Denis'), progetto_id: G('Orto Faedis'), data: g(141), fine: g(150), costo: eur(810), luogo: 'Faedis' });
+    dip(o3, o1); dip(o4, o2); dip(o4, o3);
+  });
 }

@@ -2,6 +2,7 @@
 import * as C from './conti.js';
 import { tx } from './db.js';
 import { today, ym } from './mesi.js';
+import * as T from './tempo.js';
 
 // Tabelle con modifica generica: colonne ammesse e tipi.
 const ENTITA = {
@@ -11,6 +12,7 @@ const ENTITA = {
   regole: { cols: ['testo', 'categoria_id', 'persona_id', 'priorita'], order: 'testo' },
   ricorrenze: { cols: ['nome', 'importo', 'ogni_mesi', 'giorno', 'dal', 'al', 'categoria_id', 'persona_id', 'note', 'attiva'], order: 'importo DESC' },
   salvadanai: { cols: ['nome', 'obiettivo', 'scadenza', 'versamento_mensile', 'quota_percento', 'quota_categoria_id', 'persona_id', 'priorita', 'note', 'archiviato'], order: 'priorita DESC, id' },
+  progetti: { cols: ['nome', 'area', 'persona_id', 'stato', 'inizio', 'fine', 'budget', 'salvadanaio_id', 'luogo', 'note'], order: 'nome' },
   uscite_pianificate: { cols: ['data', 'importo', 'descrizione', 'salvadanaio_id', 'fatta'], order: 'data' },
 };
 
@@ -21,7 +23,7 @@ const VALIDA = {
   },
 };
 
-export function makeApi(db, { clock } = {}) {
+export function makeApi(db, { clock, gcal = null, dopoModifica = () => {} } = {}) {
   const oggi = () => today(clock);
   const routes = [];
   const on = (method, path, fn) => {
@@ -36,6 +38,7 @@ export function makeApi(db, { clock } = {}) {
     conti: C.liquidita(db, oggi()),
     categorie: db.prepare('SELECT * FROM categorie ORDER BY tipo, nome').all(),
     salvadanai: db.prepare('SELECT id, nome FROM salvadanai WHERE archiviato = 0 ORDER BY priorita DESC, id').all(),
+    progetti: db.prepare("SELECT id, nome, area, stato FROM progetti WHERE stato != 'chiuso' ORDER BY nome").all(),
   }));
 
   on('GET', '/api/panoramica', (q) => {
@@ -93,6 +96,34 @@ export function makeApi(db, { clock } = {}) {
       .run(Number(p.id), b.data || oggi(), b.importo, b.importo < 0 ? 'spesa' : 'manuale', b.nota || null);
     return { ok: true };
   });
+
+  // ---- tempo
+  on('GET', '/api/calendario', (q) => {
+    const dal = q.get('dal') || T.monday(oggi()), al = q.get('al') || T.addDays(dal, 6);
+    return { dal, al, occorrenze: T.occorrenze(db, dal, al), ore: T.oreSettimana(db, T.monday(dal)) };
+  });
+  on('GET', '/api/todo', () => T.daFare(db, oggi()));
+  on('GET', '/api/gantt', () => T.gantt(db, oggi()));
+  on('GET', '/api/attivita', (q) => db.prepare(`SELECT id, titolo, progetto_id, stato, data, fine FROM attivita WHERE eliminata = 0 ${q.get('progetto') ? 'AND progetto_id = ?' : ''} ORDER BY COALESCE(data, '9999'), id`).all(...(q.get('progetto') ? [Number(q.get('progetto'))] : [])));
+  on('GET', '/api/attivita/:id', (_, __, p) => { const a = T.leggiAttivita(db, Number(p.id)); if (!a) throw C.httpError(404, 'Attività non trovata'); return a; });
+  on('POST', '/api/attivita', (_, b) => { const id = T.creaAttivita(db, b); dopoModifica(); return { id }; });
+  on('PATCH', '/api/attivita/:id', (_, b, p) => { const id = T.aggiornaAttivita(db, Number(p.id), b); dopoModifica(); return { id }; });
+  on('DELETE', '/api/attivita/:id', (_, __, p) => { T.eliminaAttivita(db, Number(p.id)); dopoModifica(); return { ok: true }; });
+
+  // ---- Google Calendar
+  if (gcal) {
+    on('GET', '/api/gcal/stato', () => gcal.stato());
+    on('POST', '/api/gcal/credenziali', (_, b) => {
+      if (!b.client_id || !b.client_secret) throw C.httpError(400, 'Servono ID client e segreto client');
+      gcal.salvaCredenziali(b.client_id, b.client_secret);
+      return gcal.stato();
+    });
+    on('GET', '/api/gcal/calendari', () => gcal.calendari());
+    on('POST', '/api/gcal/calendari', (_, b) => { gcal.impostaCalendariDaLeggere(b.leggi || []); return gcal.stato(); });
+    on('POST', '/api/gcal/sincronizza', async () => ({ esito: await gcal.sincronizza(), stato: gcal.stato() }));
+    on('POST', '/api/gcal/scollega', () => { gcal.scollega(); return gcal.stato(); });
+  }
+  on('GET', '/api/luoghi', () => db.prepare(`SELECT luogo FROM (SELECT luogo FROM attivita UNION SELECT luogo FROM progetti) WHERE luogo IS NOT NULL AND luogo != '' ORDER BY luogo`).all().map((r) => r.luogo));
 
   on('GET', '/api/proiezione', (q) => C.proiezione(db, Number(q.get('mesi') || 24), oggi()));
 

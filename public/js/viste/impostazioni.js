@@ -1,6 +1,7 @@
 // Impostazioni: ricorrenze, conti, categorie, regole e persone. Una vista per area.
 import { api, esc, euro, amountCell, meseNome, dataBreve, ICONE, dialogo, toast, conferma, personaChip } from '../ui.js';
 import { aggiorna } from '../app.js';
+import { googleCalendar } from './google.js';
 
 const AREE = {
   ricorrenze: { nome: 'Ricorrenze', sub: 'Entrate e uscite che tornano ogni mese, trimestre o anno. Muovono la previsione di cassa.' },
@@ -8,11 +9,19 @@ const AREE = {
   categorie: { nome: 'Categorie', sub: 'Le fisse pesano sulle uscite fisse del mese; i giroconti non contano né come entrate né come uscite.' },
   regole: { nome: 'Regole', sub: 'Se la descrizione contiene il testo, il movimento prende la categoria. Si aggiungono da sole quando classifichi.' },
   persone: { nome: 'Persone', sub: 'Ognuno ha la sua tinta: la vedi nelle corsie della panoramica.' },
+  google: { nome: 'Google Calendar', sub: 'Le attività con una data finiscono in un calendario «Cruscotto Famiglia» sul tuo Google, e le modifiche fatte lì tornano qui.' },
 };
 
 export default {
-  async monta(el, { resto, store }) {
+  async monta(el, { resto, store, params }) {
     const area = AREE[resto[0]] ? resto[0] : 'ricorrenze';
+    if (area === 'google') {
+      el.innerHTML = `<div class="wrap">
+        <div class="title-row"><div><h1>Impostazioni</h1><p class="sub">${AREE.google.sub}</p></div></div>
+        <nav class="tabs" aria-label="Aree">${Object.entries(AREE).map(([k, a]) => `<a href="#/impostazioni/${k}" aria-selected="${k === area}">${a.nome}</a>`).join('')}</nav>
+        <div id="google"></div></div>`;
+      return googleCalendar(el.querySelector('#google'), { store, params });
+    }
     const righe = await api(`/api/${area}`);
     const m = store.meta;
     const catOpt = (filtro) => m.categorie.filter(filtro || (() => true)).map((c) => ({ value: c.id, label: c.nome }));

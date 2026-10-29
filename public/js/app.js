@@ -2,16 +2,18 @@
 import { api, ICONE, MARCHIO, esc, toast } from './ui.js';
 import panoramica from './viste/panoramica.js';
 import movimenti from './viste/movimenti.js';
+import tempo from './viste/tempo.js';
 import importa from './viste/importa.js';
 import salvadanai from './viste/salvadanai.js';
 import impostazioni from './viste/impostazioni.js';
 
 const VISTE = [
-  { id: 'panoramica', nome: 'Panoramica', vista: panoramica },
+  { id: 'panoramica', nome: 'Panoramica', breve: 'Home', vista: panoramica },
+  { id: 'tempo', nome: 'Tempo', vista: tempo },
   { id: 'movimenti', nome: 'Movimenti', vista: movimenti },
   { id: 'importa', nome: 'Importa', vista: importa },
   { id: 'salvadanai', nome: 'Salvadanai', vista: salvadanai },
-  { id: 'impostazioni', nome: 'Impostazioni', vista: impostazioni, fondo: true },
+  { id: 'impostazioni', nome: 'Impostazioni', breve: 'Opzioni', vista: impostazioni, fondo: true },
 ];
 
 // Dati condivisi da tutte le viste (persone, conti, categorie). Si ricaricano dopo ogni modifica.
@@ -26,7 +28,7 @@ export const store = {
 const $vista = document.getElementById('vista');
 document.getElementById('brand').innerHTML = MARCHIO;
 document.getElementById('nav').innerHTML = VISTE.map((v) => `
-  <a class="rail-item${v.fondo ? ' fondo' : ''}" href="#/${v.id}" data-id="${v.id}" aria-label="${esc(v.nome)}" title="${esc(v.nome)}">${ICONE[v.id]}<span class="rail-label">${esc(v.nome)}</span></a>`).join('');
+  <a class="rail-item${v.fondo ? ' fondo' : ''}" href="#/${v.id}" data-id="${v.id}" aria-label="${esc(v.nome)}" title="${esc(v.nome)}">${ICONE[v.id]}<span class="rail-label" aria-hidden="true">${esc(v.breve || v.nome)}</span></a>`).join('');
 
 let corrente = null;
 async function vai() {
