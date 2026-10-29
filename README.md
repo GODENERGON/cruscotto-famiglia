@@ -3,13 +3,20 @@
 Entrate, uscite, salvadanai e previsione di cassa a 24 mesi per Denis, Carmen e Maddalena.
 Gira sul NUC con Node 22, senza dipendenze da installare: database SQLite in un file.
 
-## Avvio rapido
+## Installazione sul NUC
 
 ```bash
-cd ~/Projects/cruscotto-famiglia
-npm run seed                 # crea data/famiglia.db con i dati reali noti
-npm start                    # http://localhost:8790
+cd ~/Projects
+git clone https://github.com/GODENERGON/cruscotto-famiglia.git
+cd cruscotto-famiglia
+./install.sh
 ```
+
+Lo script crea il database con i dati reali noti, avvia il servizio all'accensione (chiede la password di sudo)
+e mette l'icona «Cruscotto Famiglia» nel menu e sulla Scrivania: si apre in una finestra sua, senza barra degli indirizzi.
+Si può rilanciare dopo ogni `git pull`: il database esistente non viene toccato.
+
+Per avviarlo a mano invece: `npm run seed` una volta, poi `npm start` (http://localhost:8790).
 
 Per vedere l'app piena con dati **inventati** (stipendi, quattro mesi di spese) senza toccare quelli veri:
 
@@ -53,15 +60,8 @@ le spese pianificate (2° acconto IRPEF del 30 novembre, saldo di giugno, assicu
   basta e, se no, dice quanto manca.
 - **Ricorrenza già arrivata**: se nel mese c'è un movimento della stessa categoria con importo entro il 15%.
 
-## Sul NUC come servizio
+## Accesso da altri dispositivi
 
-```bash
-sudo cp deploy/cruscotto-famiglia.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now cruscotto-famiglia
-```
-
-Il file presuppone l'utente `godener` e la cartella `~/Projects/cruscotto-famiglia`: modificali se serve.
 Dall'esterno: via Tailscale (`http://<ip-tailscale>:8790`). Se un giorno lo esponi sul tunnel Cloudflare,
 imposta prima `PASSWORD=...` nel servizio: l'app chiede utente e password a ogni browser nuovo.
 

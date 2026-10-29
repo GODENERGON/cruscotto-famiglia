@@ -1,0 +1,13 @@
+{
+  "name": "Cruscotto Famiglia",
+  "short_name": "Famiglia",
+  "description": "Entrate, uscite, salvadanai e previsione di cassa della famiglia.",
+  "start_url": "/#/panoramica",
+  "display": "standalone",
+  "background_color": "#f3f5f7",
+  "theme_color": "#f3f5f7",
+  "lang": "it",
+  "icons": [
+    { "src": "icona.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
